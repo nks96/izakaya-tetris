@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BLOCK PUZZLE - MULTI-DEVICE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            /* 深い紺色のトーンとネオンテイスト */
+            --bg-main: #0f172a; 
+            --bg-card: #1e293b; 
+            --border-color: #334155;
+            --accent-blue: #38bdf8;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-violet: #8b5cf6;
+        }
+
+        /* 全画面固定レイアウト */
+        html, body {
+            height: 100dvh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-main);
+            color: #f8fafc;
+            font-family: 'Segoe UI', "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            -webkit-text-size-adjust: 100%;
+            touch-action: none;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        .main-view {
+            flex: 1;
+            display: flex;
+            flex-direction: row; 
+            gap: 10px;
+            min-height: 0;
+            margin-bottom: 8px;
+        }
+
+        .canvas-container {
+            /* サイドバー拡張に伴い、比率を8から7へ調整 */
+            flex: 7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: rgba(0,0,0,0.5);
+            border-radius: 16px;
+            min-width: 0;
+            overflow: hidden;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        .sidebar {
+            /* 比率を2から3へ拡張し、横幅を1.5倍にする */
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            min-width: 210px; /* 140pxの1.5倍に変更 */
+            padding-right: 4px;
+        }
+
+        canvas#gameCanvas {
+            border: 3px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #020617; 
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .controls-area {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px; 
+            width: 100%;
+            padding: 2px 0;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px;
+            position: relative;
+        }
+
+        /* ロックパネルのスタイリング */
+        .locked-panel {
+            position: relative;
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(0.6);
+            transition: all 0.3s ease;
+        }
+        
+        .locked-badge {
+            position: absolute;
+            inset: 0;
+            display: none; 
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.7);
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 900;
+            pointer-events: none;
+            border-radius: 12px;
+            z-index: 10;
+            letter-spacing: 0.1em;
+        }
+        .locked-panel .locked-badge {
+            display: flex; 
+        }
+
+        /* マルチデバイス対応のアスペクト比・余白の極小化 */
+        @media (max-width: 640px) {
+            .app-container { padding: 4px; }
+            .main-view { gap: 6px; }
+            .sidebar { min-width: 165px; gap: 4px; } /* 110pxの1.5倍にモバイル時幅も拡張 */
+            .card { padding: 6px; border-radius: 8px; }
+            .card h3 { font-size: 8px; }
+            .card span { font-size: 8px; }
+            .sidebar button { font-size: 8px; padding-top: 4px; padding-bottom: 4px; }
+            .exclude-btn { padding: 2px; }
+        }
+
+        .toggle-switch {
+            width: 38px;
+            height: 20px;
+            background-color: #334155;
+            border-radius: 999px;
+            position: relative;
+            transition: all 0.2s ease-in-out;
+            flex-shrink: 0;
+            cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .toggle-dot {
+            width: 14px;
+            height: 14px;
+            background-color: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        input:checked + .toggle-switch { background-color: var(--accent-blue); }
+        input:checked + .toggle-switch .toggle-dot { transform: translateX(18px); }
+
+        .controls-btn {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: all 0.1s;
+            cursor: pointer;
+        }
+        .controls-btn:active { transform: scale(0.95); }
+
+        /* スタート画面、抽選、確認などは透過なし（真っ暗な背景） */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background-color: #020617; 
+            display: none; 
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            border-radius: 12px;
+            text-align: center;
+            padding: 10px;
+        }
+
+        /* FREE CHOICE選択画面は上部極薄フロートにして、背後のテトリス盤面を隠さない */
+        /* タイマーと被らないように上部余白（padding-top）を120pxに広げ、完全に分離 */
+        #aSelectionOverlay.overlay {
+            background-color: rgba(2, 6, 23, 0.2);
+            backdrop-filter: blur(2px);
+            justify-content: flex-start;
+            padding-top: 120px;
+        }
+
+        /* ゲームオーバー画面のみ透過設定 */
+        #gameOverScreen.overlay {
+            background-color: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(2px);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            cursor: pointer;
+            height: 24px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; border: 1px solid #334155; }
+        input[type="range"]::-webkit-slider-thumb { height: 18px; width: 18px; border-radius: 50%; background: var(--accent-blue); cursor: pointer; -webkit-appearance: none; margin-top: -6px; border: 2px solid #fff; }
+        
+        .save-toast {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #0ea5e9;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 99px;
+            font-weight: bold;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 3px; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
+
+        /* ミニ除外ボタンのデザイン */
+        .exclude-btn {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 4px;
+            aspect-ratio: 1.1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .exclude-btn.excluded {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.25);
+        }
+        .exclude-btn.excluded::after {
+            content: "✖";
+            color: #ef4444;
+            font-size: 14px;
+            font-weight: 900;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 5px #000;
+        }
+
+        /* セレクターボタン用 */
+        .select-btn {
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        .select-btn:active {
+            transform: scale(0.92);
+        }
+
+        /* ネオン点滅のタイマー表示 (z-indexを200に引き上げモーダルの上に見えるように調整) */
+        #setTimerDisplay {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+            border: 1.5px solid #ef4444;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="saveToast" class="save-toast">保存しました</div>
+
+    <div class="app-container">
+        <div class="main-view">
+            <!-- ゲーム画面 -->
+            <div class="canvas-container" id="gameArea">
+                <canvas id="gameCanvas" width="400" height="800"></canvas>
+                
+                <!-- 5秒自動確定タイマー (カウントダウンを5秒に設定) -->
+                <div id="setTimerDisplay" class="absolute top-16 left-1/2 transform -translate-x-1/2 bg-slate-950/90 text-red-500 font-mono font-black px-4 py-2 rounded-full text-sm tracking-wider hidden shadow-lg animate-pulse">
+                    <span id="setTimerLabel">AUTO SET</span>: <span id="setTimerSec" class="text-white text-base">5.0</span>s
+                </div>
+
+                <div id="lotteryOverlay" class="overlay">
+                    <div id="lotteryContent" class="flex flex-col items-center">
+                        <!-- カウントダウン中のサブメッセージ用 -->
+                        <div id="lotteryStatus" class="text-xs sm:text-sm font-bold text-sky-300 mb-2 h-6"></div>
+                        <div id="lotteryText" class="text-3xl sm:text-5xl font-black text-white mb-6">3</div>
+                        <canvas id="lotteryResultCanvas" width="120" height="120" class="hidden mb-4"></canvas>
+                    </div>
+                </div>
+
+                <!-- FREE CHOICE 専用ブロック選択モーダル：最上部極薄フロートで横一列に並ぶ仕様 -->
+                <div id="aSelectionOverlay" class="overlay" style="z-index: 150;">
+                    <div class="bg-slate-900/95 p-3 rounded-2xl border-2 border-amber-400 w-full max-w-[380px] flex flex-col items-center shadow-2xl">
+                        <h3 class="text-amber-400 font-black text-xs text-center mb-2 leading-tight">
+                            ★ FREE CHOICE 効果発動 ★<br>
+                            <span class="text-[9px] text-slate-300">落としたいブロックを1つ選んでください</span>
+                        </h3>
+                        <div class="grid grid-cols-7 gap-1 w-full justify-center" id="aSelectionGrid">
+                            <!-- JSにより1〜7のブロック選択肢ボタンが「横一列」に生成されます -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 息抜き通常テトリス終了時のスコア比較モーダル (息抜き終了！の記載を削除) -->
+                <div id="scoreComparisonOverlay" class="overlay" style="z-index: 160;">
+                    <div class="bg-slate-800 p-5 rounded-xl border border-violet-500 max-w-[320px] w-full text-center space-y-4 my-4">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">今回の通常スコア</p>
+                            <p id="compCurrentScore" class="text-3xl font-black text-white font-mono">1,200</p>
+                        </div>
+                        <div class="border-t border-slate-700 pt-3">
+                            <p class="text-xs text-slate-400 mb-1">最初のゲームのスコア</p>
+                            <p id="compFirstScore" class="text-2xl font-black text-sky-400 font-mono">1,500</p>
+                        </div>
+                        <div class="border-t border-slate-700 pt-3" id="compResultMessage">
+                            <!-- 比較テキスト -->
+                        </div>
+                    </div>
+                    <button id="returnToIzakayaBtn" class="bg-violet-500 hover:bg-violet-400 text-white font-black py-4 px-10 rounded-xl text-lg active:scale-95 transition-transform shadow-lg uppercase">居酒屋テトリスモードへ戻る</button>
+                </div>
+
+                <div id="confirmOverlay" class="overlay">
+                    <h2 id="confirmTitle" class="text-xl font-black text-white mb-4">保存しますか？</h2>
+                    <div class="flex gap-2 w-full max-w-[240px]">
+                        <button id="confirmYesBtn" class="flex-1 bg-sky-500 text-white font-black py-4 rounded-lg uppercase">はい</button>
+                        <button id="confirmNoBtn" class="flex-1 bg-slate-700 text-white font-black py-4 rounded-lg uppercase">いいえ</button>
+                    </div>
+                </div>
+
+                <!-- 一時停止ポーズ画面 -->
+                <div id="pauseOverlay" class="overlay" style="background-color: rgba(2, 6, 23, 0.85); backdrop-filter: blur(4px);">
+                    <h2 class="text-3xl sm:text-5xl font-black text-amber-400 mb-6 tracking-widest uppercase text-center">PAUSED</h2>
+                    <p class="text-sm text-slate-300 mb-8 text-center">ゲームは一時停止中です</p>
+                    <button id="resumeOverlayBtn" class="bg-emerald-600 text-white font-black py-4 px-12 rounded-2xl text-lg uppercase shadow-xl active:scale-95 transition-transform">ゲーム再開</button>
+                </div>
+
+                <!-- スタート画面 -->
+                <div id="startScreen" class="overlay" style="display: flex;">
+                    <h1 class="text-4xl sm:text-6xl font-black text-white mb-10 text-center">居酒屋<br>テトリス</h1>
+                    <h2 class="text-3xl sm:text-5xl font-black text-sky-400 mb-8 tracking-widest uppercase text-center">READY?</h2>
+                    <button id="startBtn" class="bg-sky-500 text-white font-black py-5 px-16 rounded-2xl text-xl uppercase shadow-xl active:scale-95 transition-transform">Start</button>
+                </div>
+
+                <div id="gameOverScreen" class="overlay">
+                    <h2 class="text-2xl sm:text-4xl font-black text-red-500 mb-4 uppercase">GAME OVER</h2>
+                    <div id="gameOverButtons" class="flex flex-col gap-3 w-full max-w-[320px]" style="display: none;">
+                        <button id="restartBtn" class="bg-red-500 text-white font-black py-4 px-10 rounded-xl text-lg active:scale-95 transition-transform shadow-lg uppercase">Retry</button>
+                        <button id="continueFreeBtn" class="bg-slate-700 text-white font-black py-4 px-6 rounded-xl text-lg active:scale-95 transition-transform shadow-lg uppercase">居酒屋テトリスモード</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- サイドバー (3割に拡張) -->
+            <div class="sidebar">
+                <!-- スコアボード（居酒屋テトリスモード中も常時大きく残す、表記を「初回スコア」に修正） -->
+                <div id="scoreArea" class="card p-3 space-y-1.5 border-sky-500/50 shadow-lg shadow-sky-950/20">
+                    <h3 class="text-sky-400 text-xs font-extrabold tracking-widest uppercase border-b border-slate-700 pb-1.5 text-center">スコア情報</h3>
+                    <div class="flex justify-between items-center py-0.5">
+                        <span class="text-xs font-bold text-slate-300">初回スコア:</span>
+                        <span id="currentScoreDisplay" class="text-lg font-mono font-black text-sky-400">0</span>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-slate-800 pt-1 text-xs">
+                        <span class="text-slate-400 font-bold">ハイスコア:</span>
+                        <span id="firstHighScoreDisplay" class="font-mono font-bold text-slate-200 text-sm">0</span>
+                    </div>
+                    <div id="miniGameBadge" class="hidden text-[9px] bg-violet-600 text-violet-100 text-center py-1 rounded-md font-black border border-violet-500 animate-pulse mt-1">息抜きスコア計測中</div>
+                </div>
+
+                <!-- 落下速度設定カード (最大値を10、初期値を8に変更) -->
+                <div class="card p-2.5 space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300 font-bold">落下速度</span>
+                        <span id="speedValueDisplay" class="text-sky-400 font-mono font-bold text-sm">8</span>
+                    </div>
+                    <input type="range" id="speedRange" min="1" max="10" value="8">
+                </div>
+
+                <!-- カードデッキ抽選 (大きく表示、通常時はロック、表記名を「カード抽選」に変更) -->
+                <div class="card p-3 space-y-3" id="lotteryPanel">
+                    <div class="locked-badge">LOCK (居酒屋テトリスモードで解放)</div>
+                    <h3 class="text-emerald-400 text-xs font-extrabold uppercase border-b border-slate-700 pb-1 tracking-wider text-center">カード抽選</h3>
+                    
+                    <!-- 除外ブロックセクター (高さをさらに拡張 max-h-72) -->
+                    <div class="space-y-1.5">
+                        <span class="text-[9px] font-black text-slate-300 leading-tight block text-center">除外カード選択（1つ除外ごとに消費+1）</span>
+                        <div class="grid grid-cols-4 gap-1 max-h-72 overflow-y-auto p-1 bg-slate-950/20 rounded-md" id="excludeBlockContainer">
+                            <!-- JSにて1〜9個(ブロック7種+FREE CHOICE+JOKER設定枚数分)の除外トグルアイコンを配置 -->
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 pt-2 border-t border-slate-700">
+                        <!-- FREE CHOICE設定 (改行して-+ボタンを配置) -->
+                        <div class="flex flex-col gap-1 text-xs">
+                            <span class="text-slate-300 font-bold text-center">FREE CHOICE 設定数</span>
+                            <div class="flex items-center justify-center gap-2">
+                                <button id="btnAMinus" class="bg-slate-700 hover:bg-slate-600 text-white w-8 h-6 rounded-md flex items-center justify-center font-black text-sm">-</button>
+                                <span id="displayNumA" class="text-sm font-mono font-black text-amber-400 w-8 text-center text-base">1</span>
+                                <button id="btnAPlus" class="bg-slate-700 hover:bg-slate-600 text-white w-8 h-6 rounded-md flex items-center justify-center font-black text-sm">+</button>
+                            </div>
+                        </div>
+
+                        <!-- JOKER設定 (改行して-+ボタンを配置) -->
+                        <div class="flex flex-col gap-1 text-xs border-t border-slate-800 pt-2">
+                            <span class="text-slate-300 font-bold text-center">JOKER 設定数</span>
+                            <div class="flex items-center justify-center gap-2">
+                                <button id="btnJokerMinus" class="bg-slate-700 hover:bg-slate-600 text-white w-8 h-6 rounded-md flex items-center justify-center font-black text-sm">-</button>
+                                <span id="displayNumJoker" class="text-sm font-mono font-black text-pink-500 w-8 text-center text-base">1</span>
+                                <button id="btnJokerPlus" class="bg-slate-700 hover:bg-slate-600 text-white w-8 h-6 rounded-md flex items-center justify-center font-black text-sm">+</button>
+                            </div>
+                        </div>
+
+                        <div class="text-[10px] text-slate-400 text-center font-bold py-1 bg-slate-950/40 rounded-lg mt-2" id="lotteryCostText">
+                            消費ストック数: 1
+                        </div>
+                        <button id="drawBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black py-2.5 rounded-lg shadow-md transition-colors tracking-widest">カードを引く</button>
+                    </div>
+                </div>
+
+                <!-- ストック (大きく表示、通常時はロック) -->
+                <div class="card p-3 space-y-2" id="stockPanel">
+                    <div class="locked-badge">LOCK (居酒屋テトリスモードで解放)</div>
+                    <h3 class="text-amber-400 text-xs font-extrabold uppercase border-b border-slate-700 pb-1 tracking-wider text-center">ストック数</h3>
+                    <div class="flex items-center justify-between gap-2 py-1">
+                        <button id="counterMinus" class="bg-slate-700 hover:bg-slate-600 text-white w-10 h-10 rounded-lg flex items-center justify-center font-black text-xl shadow">-</button>
+                        <span id="counterValue" class="text-3xl font-mono font-black text-white min-w-[3rem] text-center drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">0</span>
+                        <button id="counterPlus" class="bg-slate-700 hover:bg-slate-600 text-white w-10 h-10 rounded-lg flex items-center justify-center font-black text-xl shadow">+</button>
+                    </div>
+                </div>
+
+                <!-- 通常テトリスを実施（居酒屋テトリスモード時のみ出現） -->
+                <button id="suspendPlayBtn" class="hidden w-full bg-violet-700 hover:bg-violet-600 text-white text-[10px] font-black py-3.5 rounded-xl uppercase shadow-md flex items-center justify-center gap-1 transition-all active:scale-95 tracking-wide">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    通常テトリスを実施
+                </button>
+
+                <!-- ひとつ前に戻る -->
+                <button id="undoBtn" class="w-full bg-amber-600 text-white text-[10px] font-black py-3.5 rounded-xl uppercase shadow-md flex items-center justify-center gap-1 active:bg-amber-500 tracking-wide">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                    ひとつ前に戻る
+                </button>
+
+                <!-- 一時停止ボタン (Undoの下に配置) -->
+                <button id="pauseBtn" class="w-full bg-slate-600 text-white text-[10px] font-black py-3.5 rounded-xl uppercase shadow-md flex items-center justify-center gap-1 active:bg-slate-500 tracking-wide mt-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" id="pauseIcon"><rect x="4" y="4" width="4" height="16"/><rect x="16" y="4" width="4" height="16"/></svg>
+                    一時停止
+                </button>
+
+                <!-- セーブ・ロード -->
+                <div class="grid grid-cols-2 gap-2 mt-auto pt-2">
+                    <button id="saveBtn" class="bg-slate-600 text-white text-[9px] py-2.5 rounded-lg uppercase font-bold active:bg-slate-500 text-center">セーブ</button>
+                    <button id="loadBtn" class="bg-slate-600 text-white text-[9px] py-2.5 rounded-lg uppercase font-bold active:bg-slate-500 text-center">ロード</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作パネル -->
+        <div class="controls-area">
+            <div class="grid grid-cols-3 gap-2 w-full max-w-[360px] mx-auto">
+                <button id="ctrl-rotL" class="controls-btn bg-slate-600 h-11 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M2.5 2v6h6"/><path d="M21.5 12a9 9 0 0 0-15-6.7L2.5 8"/></svg>
+                </button>
+                <button id="ctrl-up" class="controls-btn bg-slate-700 h-11 rounded-xl flex items-center justify-center text-slate-200 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m18 15-6-6-6 6"/></svg>
+                </button>
+                <button id="ctrl-rotR" class="controls-btn bg-slate-600 h-11 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21.5 2v6h-6"/><path d="M2.5 12a9 9 0 0 1 15-6.7L21.5 8"/></svg>
+                </button>
+                <button id="ctrl-left" class="controls-btn bg-slate-700 h-11 rounded-xl flex items-center justify-center text-slate-200 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button id="ctrl-down" class="controls-btn bg-slate-700 h-11 rounded-xl flex items-center justify-center text-slate-200 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <button id="ctrl-right" class="controls-btn bg-slate-700 h-11 rounded-xl flex items-center justify-center text-slate-200 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+            <button id="ctrl-drop" class="controls-btn bg-sky-600 h-9 mt-1 rounded-xl font-black text-xs tracking-[0.3em] uppercase text-white w-full shadow-xl">Hard Drop / Set</button>
+        </div>
+    </div>
+
+    <script>
+        const COLS = 10;
+        const INITIAL_ROWS = 20;
+        const EXTENDED_ROWS = 24;
+        const BLOCK_SIZE = 40;
+        const COLORS = [null, '#00f0f0', '#0000f0', '#f0a000', '#f0f000', '#00f000', '#a000f0', '#f00000', '#ffd700', '#ec4899'];
+        const SHAPES = [
+            [],
+            [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I (1)
+            [[2,0,0],[2,2,2],[0,0,0]],                 // J (2)
+            [[0,0,3],[3,3,3],[0,0,0]],                 // L (3)
+            [[4,4],[4,4]],                             // O (4)
+            [[0,5,5],[5,5,0],[0,0,0]],                 // S (5)
+            [[0,6,0],[6,6,6],[0,0,0]],                 // T (6)
+            [[7,7,0],[0,7,7],[0,0,0]],                 // Z (7)
+            [[8]],                                     // FREE CHOICE (8)
+            [[9]]                                      // JOKER (9)
+        ];
+
+        const app = {
+            canvas: null, ctx: null,
+            currentRows: INITIAL_ROWS,
+            board: [],
+            piece: null, nextPiece: null, 
+            gameOver: false, isPaused: true, isLotteryRunning: false,
+            isConfirming: false,
+            isFreeFall: true, isFreePlacement: false, isExtended: false,
+            isAutoNext: true,
+            baseSpeed: 8, // 落下速度初期値を 8 に設定
+            
+            // スコア情報管理
+            score: 0,
+            firstGameScore: 0,  // 一番最初にプレイしたゲームの最終スコアを保持
+            firstHighScore: 0,  // 最初の通常テトリスのハイスコア
+            isSuspendedPlay: false, // 居酒屋テトリスモード中に「息抜きプレイ」をしているか
+            suspendedState: null, // 中断中の居酒屋テトリス状態を退避するオブジェクト
+
+            // 5秒自動確定タイマー状態 (5秒制限)
+            autoSetTimer: 0,
+            autoSetTimerActive: false,
+            isASelectionActive: false, // FREE CHOICE選択モーダルが動作中かどうかのフラグ
+
+            // FREE CHOICEとJOKERの抽選用初期枚数
+            numA: 1,
+            numJoker: 1,
+
+            // 除外されたスロットのインデックスを格納
+            excludedSlots: [], 
+
+            counterValue: 0, 
+            dropCounter: 0, dropInterval: 600, lastTime: 0,
+            history: [],
+            lockCounter: 0,
+            lockDelay: 500,
+            lockResetCount: 0,
+            MAX_LOCK_RESETS: 10,
+
+            touchState: {
+                startX: 0, startY: 0, 
+                origStartY: 0, 
+                lastX: 0, lastY: 0, 
+                startTime: 0, threshold: 20, moveThreshold: 25, 
+                hasMoved: false,
+                swipeDirection: null 
+            },
+
+            confirmAction: null,
+
+            init() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                // 一番最初のゲーム最終スコアをローカルストレージから復元
+                const savedFirstScore = localStorage.getItem('tetris_first_score');
+                // 0でも正しく読み込めるように厳密なnullチェック
+                this.firstGameScore = savedFirstScore !== null ? parseInt(savedFirstScore) : 0;
+
+                // ハイスコア復元
+                const savedHighScore = localStorage.getItem('tetris_first_highscore');
+                this.firstHighScore = savedHighScore !== null ? parseInt(savedHighScore) : 0;
+                this.updateScoreUI();
+
+                this.resetGameData(); 
+                this.bindEvents();
+                this.bindTouchEvents(); 
+                this.updateBaseSpeed(); 
+                this.createExcludeBlockUI();
+                this.updateDeckUI();
+                this.updateLockState();
+                this.showUI('startScreen');
+                
+                this.lastTime = performance.now();
+                requestAnimationFrame((t) => this.gameLoop(t));
+                this.updateCounterUI();
+                this.draw();
+            },
+
+            showUI(id) {
+                const uis = ['startScreen', 'gameOverScreen', 'lotteryOverlay', 'confirmOverlay', 'aSelectionOverlay', 'scoreComparisonOverlay', 'pauseOverlay'];
+                uis.forEach(u => {
+                    const el = document.getElementById(u);
+                    if (u === id) { 
+                        el.style.display = 'flex'; 
+                        if (u === 'gameOverScreen') {
+                            const btnArea = document.getElementById('gameOverButtons');
+                            btnArea.style.display = 'none'; 
+                            // 待ち時間を 1秒 に変更
+                            setTimeout(() => {
+                                if (this.gameOver) { 
+                                    btnArea.style.display = 'flex';
+                                }
+                            }, 1000);
+                        }
+                    } else { 
+                        el.style.display = 'none'; 
+                    }
+                });
+            },
+
+            restoreOverlayState() {
+                if (this.isLotteryRunning || this.isConfirming) return;
+                if (this.gameOver) this.showUI('gameOverScreen');
+                else if (this.isPaused) this.showUI('pauseOverlay'); // ポーズ画面状態
+                else this.showUI(null);
+            },
+
+            requestConfirm(type) {
+                this.confirmAction = type;
+                this.isConfirming = true;
+                this.autoSetTimerActive = false; // 確認中はタイマー停止
+                const title = document.getElementById('confirmTitle');
+                title.innerText = type === 'save' ? '保存しますか？' : '読み込みますか？';
+                this.showUI('confirmOverlay');
+            },
+
+            disableFreeFall() {
+                this.isFreeFall = false;
+            },
+
+            handleLockReset() {
+                if (this.lockResetCount < this.MAX_LOCK_RESETS) {
+                    this.lockCounter = 0;
+                    this.lockResetCount++;
+                }
+            },
+
+            // ロック状態を更新（通常モードと居酒屋テトリスモードの解放切り替え）
+            updateLockState() {
+                const isIzakaya = this.isExtended; 
+                const lotteryPanel = document.getElementById('lotteryPanel');
+                const stockPanel = document.getElementById('stockPanel');
+                const scoreArea = document.getElementById('scoreArea');
+                const suspendBtn = document.getElementById('suspendPlayBtn');
+                const badge = document.getElementById('miniGameBadge');
+
+                if (isIzakaya) {
+                    // ロック解除
+                    lotteryPanel.classList.remove('locked-panel');
+                    stockPanel.classList.remove('locked-panel');
+                    scoreArea.classList.remove('hidden');
+                    suspendBtn.classList.remove('hidden'); // 息抜きボタンを出現
+                } else {
+                    // ロック
+                    lotteryPanel.classList.add('locked-panel');
+                    stockPanel.classList.add('locked-panel');
+                    scoreArea.classList.remove('hidden');
+                    suspendBtn.classList.add('hidden'); // 通常時は息抜きボタン非表示
+                }
+
+                if (this.isSuspendedPlay) {
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            },
+
+            updateDeckUI() {
+                document.getElementById('displayNumA').innerText = this.numA;
+                document.getElementById('displayNumJoker').innerText = this.numJoker;
+                const cost = 1 + this.excludedSlots.length;
+                document.getElementById('lotteryCostText').innerHTML = `消費ストック数: <span class="text-emerald-400 font-bold">${cost}</span>`;
+            },
+
+            // 抽選枠の総スロットを動的生成
+            getSlots() {
+                const slots = [];
+                // 通常ブロック 1〜7 (各1個)
+                for (let i = 1; i <= 7; i++) {
+                    slots.push({ type: i });
+                }
+                // FREE CHOICE (type: 8) 設定枚数分
+                for (let i = 0; i < this.numA; i++) {
+                    slots.push({ type: 8 });
+                }
+                // JOKER (type: 9) 設定枚数分
+                for (let i = 0; i < this.numJoker; i++) {
+                    slots.push({ type: 9 });
+                }
+                return slots;
+            },
+
+            // 除外枠トグルボタンを生成 (FREE CHOICEとJOKERも含めた設定枚数に完全連動)
+            createExcludeBlockUI() {
+                const container = document.getElementById('excludeBlockContainer');
+                container.innerHTML = '';
+                
+                const slots = this.getSlots();
+
+                // 設定枚数が減って、除外スロットインデックスが上限からはみ出した場合のクリーンアップ
+                this.excludedSlots = this.excludedSlots.filter(idx => idx < slots.length);
+
+                slots.forEach((slot, idx) => {
+                    const btn = document.createElement('div');
+                    btn.className = 'exclude-btn';
+                    btn.dataset.idx = idx;
+                    
+                    if (this.excludedSlots.includes(idx)) {
+                        btn.classList.add('excluded');
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 24;
+                    canvas.height = 24;
+                    const ctx = canvas.getContext('2d');
+
+                    if (slot.type <= 7) {
+                        ctx.fillStyle = COLORS[slot.type];
+                        const shape = SHAPES[slot.type];
+                        const blockS = 4;
+                        const ox = (canvas.width - shape[0].length * blockS) / 2;
+                        const oy = (canvas.height - shape.length * blockS) / 2;
+                        shape.forEach((row, y) => row.forEach((val, x) => {
+                            if (val > 0) ctx.fillRect(ox + x*blockS, oy + y*blockS, blockS - 0.5, blockS - 0.5);
+                        }));
+                    } else if (slot.type === 8) {
+                        ctx.fillStyle = '#ffd700';
+                        ctx.font = 'bold 13px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('F', 12, 12); 
+                    } else if (slot.type === 9) {
+                        ctx.fillStyle = '#ec4899';
+                        ctx.font = '13px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('🃏', 12, 12);
+                    }
+
+                    btn.appendChild(canvas);
+                    btn.onclick = () => this.toggleExcludeSlot(idx, slots.length);
+                    container.appendChild(btn);
+                });
+            },
+
+            toggleExcludeSlot(idx, totalSlotsLength) {
+                const foundIdx = this.excludedSlots.indexOf(idx);
+                if (foundIdx > -1) {
+                    this.excludedSlots.splice(foundIdx, 1);
+                } else {
+                    // すべてのスロットを除外しようとする最後の1枚は除外を拒否
+                    if (this.excludedSlots.length >= totalSlotsLength - 1) {
+                        const toast = document.getElementById('saveToast');
+                        toast.innerText = `最後の1枚は除外できません！`; 
+                        toast.style.opacity = '1';
+                        setTimeout(() => toast.style.opacity = '0', 2000);
+                        return;
+                    }
+                    this.excludedSlots.push(idx);
+                }
+                this.createExcludeBlockUI();
+                this.updateDeckUI();
+            },
+
+            updateScoreUI() {
+                if (this.isSuspendedPlay) {
+                    // 息抜きプレイ中はその息抜きのスコアを表示
+                    document.getElementById('currentScoreDisplay').innerText = this.score.toLocaleString();
+                } else {
+                    // 居酒屋テトリスモード中、または最初の通常ゲーム中は「最初の通常テトリス」の最終スコアを固定表示
+                    document.getElementById('currentScoreDisplay').innerText = this.firstGameScore.toLocaleString();
+                }
+                document.getElementById('firstHighScoreDisplay').innerText = this.firstHighScore.toLocaleString();
+            },
+
+            // 一時停止／再開のトグル
+            togglePause() {
+                if (this.gameOver || this.isLotteryRunning || this.isConfirming) return;
+                this.isPaused = !this.isPaused;
+                
+                const pauseBtn = document.getElementById('pauseBtn');
+                if (!pauseBtn) return;
+
+                if (this.isPaused) {
+                    pauseBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        再開
+                    `;
+                    pauseBtn.classList.remove('bg-slate-600', 'hover:bg-slate-500');
+                    pauseBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+                    
+                    this.showUI('pauseOverlay');
+                } else {
+                    pauseBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" id="pauseIcon"><rect x="4" y="4" width="4" height="16"/><rect x="16" y="4" width="4" height="16"/></svg>
+                        一時停止
+                    `;
+                    pauseBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+                    pauseBtn.classList.add('bg-slate-600', 'hover:bg-slate-500');
+                    
+                    this.restoreOverlayState();
+                }
+            },
+
+            bindEvents() {
+                const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
+
+                const bindButton = (id, action) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.addEventListener('click', (e) => { prevent(e); action(e); });
+                };
+
+                bindButton('startBtn', async () => {
+                    if (this.isLotteryRunning) return;
+                    this.gameOver = false;
+                    this.isExtended = false;
+                    this.isSuspendedPlay = false;
+                    this.currentRows = INITIAL_ROWS;
+                    this.resetGameData();
+                    this.isLotteryRunning = true;
+                    this.showUI('lotteryOverlay');
+                    
+                    const statusText = document.getElementById('lotteryStatus');
+                    statusText.innerText = "まずは普通にテトリス！";
+                    
+                    const text = document.getElementById('lotteryText');
+                    for (let i = 3; i > 0; i--) {
+                        text.innerText = i;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                    this.isLotteryRunning = false;
+                    this.isPaused = false;
+                    statusText.innerText = ""; 
+                    this.showUI(null);
+                });
+
+                bindButton('restartBtn', () => {
+                    this.gameOver = false;
+                    this.isExtended = false;
+                    this.isSuspendedPlay = false;
+                    this.currentRows = INITIAL_ROWS;
+                    this.resetGameData();
+                    this.isPaused = false;
+                    this.showUI(null);
+                });
+
+                bindButton('continueFreeBtn', () => {
+                    this.gameOver = false;
+                    this.isPaused = false;
+                    this.isFreePlacement = true;
+                    this.isAutoNext = true; // 自動投入
+                    this.disableFreeFall();
+
+                    // 居酒屋テトリスモード開始時に、FREECHOICEを2、JOKERを1、ストック数を0に初期設定
+                    this.numA = 2;
+                    this.numJoker = 1;
+                    this.counterValue = 0;
+
+                    if (!this.isExtended) {
+                        const extraRows = EXTENDED_ROWS - INITIAL_ROWS;
+                        for(let i=0; i<extraRows; i++) { this.board.unshift(Array(COLS).fill(0)); }
+                        this.currentRows = EXTENDED_ROWS;
+                        this.isExtended = true;
+                        this.canvas.height = EXTENDED_ROWS * BLOCK_SIZE;
+                    }
+                    
+                    this.createExcludeBlockUI(); // 除外枠を数に合わせて更新
+                    this.updateDeckUI();
+                    this.updateCounterUI();
+                    this.updateLockState();
+                    this.showUI(null);
+                    this.piece = null;
+                    this.draw();
+                });
+
+                bindButton('confirmYesBtn', () => {
+                    if (this.confirmAction === 'save') this.saveLocal();
+                    else if (this.confirmAction === 'load') this.loadLocal();
+                    this.isConfirming = false;
+                    this.restoreOverlayState();
+                });
+
+                bindButton('confirmNoBtn', () => {
+                    this.isConfirming = false;
+                    this.restoreOverlayState();
+                });
+
+                // FREE CHOICEとJOKERの枚数コントロールイベント (連動して除外枠UIもリフレッシュ)
+                bindButton('btnAMinus', () => {
+                    if (this.numA > 0) { 
+                        this.numA--; 
+                        this.createExcludeBlockUI();
+                        this.updateDeckUI(); 
+                    }
+                });
+                bindButton('btnAPlus', () => {
+                    if (this.numA < 20) { 
+                        this.numA++; 
+                        this.createExcludeBlockUI();
+                        this.updateDeckUI(); 
+                    }
+                });
+                bindButton('btnJokerMinus', () => {
+                    if (this.numJoker > 0) { 
+                        this.numJoker--; 
+                        this.createExcludeBlockUI();
+                        this.updateDeckUI(); 
+                    }
+                });
+                bindButton('btnJokerPlus', () => {
+                    if (this.numJoker < 20) { 
+                        this.numJoker++; 
+                        this.createExcludeBlockUI();
+                        this.updateDeckUI(); 
+                    }
+                });
+
+                bindButton('drawBtn', () => { this.disableFreeFall(); this.drawLottery(); });
+                
+                // Undo時は自由落下設定を維持するため、disableFreeFall() を呼び出さない
+                bindButton('undoBtn', () => { this.undo(); });
+
+                // 一時停止ボタンの追加
+                bindButton('pauseBtn', () => { this.togglePause(); });
+                bindButton('resumeOverlayBtn', () => { this.togglePause(); });
+                
+                // 息抜きプレイボタン
+                bindButton('suspendPlayBtn', () => { this.suspendAndStartNormalGame(); });
+                // 息抜き終了リザルト戻るボタン
+                bindButton('returnToIzakayaBtn', () => { this.returnToIzakayaGame(); });
+
+                document.getElementById('speedRange').oninput = (e) => { this.updateBaseSpeed(); };
+
+                bindButton('counterPlus', () => { this.counterValue++; this.updateCounterUI(); });
+                bindButton('counterMinus', () => { if(this.counterValue > 0) { this.counterValue--; this.updateCounterUI(); } });
+
+                const bindControl = (id, action) => {
+                    const el = document.getElementById(id);
+                    const handler = (e) => { 
+                        prevent(e); 
+                        if(!this.isPaused && !this.gameOver && !this.isLotteryRunning && !this.isConfirming) action(); 
+                    };
+                    el.addEventListener('mousedown', handler);
+                    el.addEventListener('touchstart', handler);
+                };
+
+                bindControl('ctrl-left', () => playerMove(-1));
+                bindControl('ctrl-right', () => playerMove(1));
+                bindControl('ctrl-up', () => playerRotate(1)); // 常に回転に割り当て
+                bindControl('ctrl-down', () => {
+                    // 配置時間中は下キー操作を無効にする
+                    if (!(app.isFreePlacement && app.autoSetTimerActive)) {
+                        playerDrop();
+                    }
+                });
+                bindControl('ctrl-rotL', () => playerRotate(-1));
+                bindControl('ctrl-rotR', () => playerRotate(1));
+                bindControl('ctrl-drop', () => playerHardDrop());
+            },
+
+            bindTouchEvents() {
+                const gameArea = document.getElementById('gameArea');
+                gameArea.addEventListener('touchstart', (e) => {
+                    if (this.isPaused || this.gameOver || this.isLotteryRunning || this.isConfirming) return;
+                    const touch = e.touches[0];
+                    this.touchState.startX = touch.clientX;
+                    this.touchState.startY = touch.clientY;
+                    this.touchState.origStartY = touch.clientY;
+                    this.touchState.lastX = touch.clientX;
+                    this.touchState.lastY = touch.clientY;
+                    this.touchState.startTime = Date.now();
+                    this.touchState.hasMoved = false;
+                    this.touchState.swipeDirection = null; 
+                }, { passive: false });
+
+                gameArea.addEventListener('touchmove', (e) => {
+                    if (this.isPaused || this.gameOver || this.isLotteryRunning || this.isConfirming || !this.piece) return;
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    
+                    if (this.isFreePlacement) {
+                        const dx = touch.clientX - this.touchState.startX;
+                        const dy = touch.clientY - this.touchState.startY;
+                        const moveStep = this.touchState.moveThreshold;
+
+                        if (Math.abs(dx) > moveStep) {
+                            playerMove(dx > 0 ? 1 : -1);
+                            this.touchState.startX = touch.clientX;
+                            this.touchState.hasMoved = true;
+                        }
+                        if (Math.abs(dy) > moveStep) {
+                            if (dy > 0) {
+                                // 5秒の配置時間中は下スワイプを無効化
+                                if (!(this.isFreePlacement && this.autoSetTimerActive)) {
+                                    playerDrop();
+                                }
+                            } else {
+                                playerMoveUp();
+                            }
+                            this.touchState.startY = touch.clientY;
+                            this.touchState.hasMoved = true;
+                        }
+                    } else {
+                        if (!this.touchState.swipeDirection) {
+                            const absX = Math.abs(touch.clientX - this.touchState.startX);
+                            const absY = Math.abs(touch.clientY - this.touchState.startY);
+                            if (absX > 10 || absY > 10) {
+                                this.touchState.swipeDirection = absX > absY ? 'horizontal' : 'vertical';
+                            }
+                        }
+                        if (this.touchState.swipeDirection === 'horizontal') {
+                            if (Math.abs(touch.clientX - this.touchState.startX) > this.touchState.moveThreshold) {
+                                playerMove(touch.clientX > this.touchState.startX ? 1 : -1);
+                                this.touchState.startX = touch.clientX; 
+                                this.touchState.hasMoved = true;
+                            }
+                        } else if (this.touchState.swipeDirection === 'vertical') {
+                            const dy = touch.clientY - this.touchState.startY;
+                            if (Math.abs(dy) > this.touchState.moveThreshold) {
+                                if (dy > 0) {
+                                    if (!(this.isFreePlacement && this.autoSetTimerActive)) {
+                                        playerDrop();
+                                    }
+                                }
+                                this.touchState.startY = touch.clientY;
+                                this.touchState.hasMoved = true;
+                            }
+                        }
+                    }
+                    this.touchState.lastX = touch.clientX;
+                    this.touchState.lastY = touch.clientY;
+                }, { passive: false });
+
+                gameArea.addEventListener('touchend', (e) => {
+                    if (this.isPaused || this.gameOver || this.isLotteryRunning || this.isConfirming) return;
+                    const touch = e.changedTouches[0];
+                    const totalDy = touch.clientY - this.touchState.origStartY;
+                    const duration = Date.now() - this.touchState.startTime;
+
+                    // 自由配置モード(居酒屋テトリス)でも、上スワイプでのHard Dropを維持
+                    if (totalDy < -60) {
+                        playerHardDrop();
+                        return;
+                    }
+                    if (!this.touchState.hasMoved && duration < 250) {
+                        playerRotate(1);
+                    }
+                }, { passive: false });
+            },
+
+            updateCounterUI() { document.getElementById('counterValue').innerText = this.counterValue; },
+
+            saveHistory() {
+                const state = {
+                    board: JSON.parse(JSON.stringify(this.board)),
+                    piece: this.piece ? { shape: JSON.parse(JSON.stringify(this.piece.shape)), colorIndex: this.piece.colorIndex, pos: { ...this.piece.pos } } : null,
+                    nextPiece: this.nextPiece ? { shape: JSON.parse(JSON.stringify(this.nextPiece.shape)), colorIndex: this.nextPiece.colorIndex } : null,
+                    gameOver: this.gameOver,
+                    counterValue: this.counterValue,
+                    currentRows: this.currentRows,
+                    isExtended: this.isExtended,
+                    isFreePlacement: this.isFreePlacement,
+                    isFreeFall: this.isFreeFall, // Undo時の自由落下維持のために履歴に保存
+                    isAutoNext: this.isAutoNext,
+                    score: this.score,
+                    firstGameScore: this.firstGameScore
+                };
+                this.history.push(state);
+                if (this.history.length > 200) this.history.shift(); 
+            },
+
+            undo() {
+                this.autoSetTimerActive = false; // タイマーリセット
+                this.isASelectionActive = false;
+                if (this.history.length <= 1) return;
+                this.history.pop();
+                const prevState = this.history[this.history.length - 1];
+                this.board = JSON.parse(JSON.stringify(prevState.board));
+                this.currentRows = prevState.currentRows;
+                this.isExtended = prevState.isExtended;
+                this.isFreePlacement = prevState.isFreePlacement;
+                
+                // 履歴から自由落下状態を正確に復元する（トグルスイッチ表示も連動）
+                this.isFreeFall = prevState.isFreeFall !== undefined ? prevState.isFreeFall : this.isFreeFall;
+                const freeFallToggle = document.getElementById('freeFallToggle');
+                if (freeFallToggle) freeFallToggle.checked = this.isFreeFall;
+
+                this.isAutoNext = prevState.isAutoNext;
+                this.canvas.height = this.currentRows * BLOCK_SIZE;
+                this.piece = prevState.piece ? new Piece(prevState.piece.shape, prevState.piece.colorIndex, prevState.piece.pos) : null;
+                this.nextPiece = prevState.nextPiece ? new Piece(prevState.nextPiece.shape, prevState.nextPiece.colorIndex) : null;
+                
+                // 居酒屋テトリスモード（this.isExtended === true）のときは自動投入せず、次のブロックの自動表示は行わない
+                if (!this.piece && !this.gameOver && !this.isPaused) {
+                    if (!this.isExtended) {
+                        this.piece = this.nextPiece || generateNewPiece();
+                        this.nextPiece = generateNewPiece();
+                    }
+                }
+                
+                this.gameOver = prevState.gameOver;
+                this.score = prevState.score !== undefined ? prevState.score : this.score;
+                this.firstGameScore = prevState.firstGameScore !== undefined ? prevState.firstGameScore : this.firstGameScore;
+                this.counterValue = prevState.counterValue !== undefined ? prevState.counterValue : this.counterValue;
+                this.restoreOverlayState();
+                this.updateLockState();
+                this.updateCounterUI();
+                this.updateScoreUI();
+                this.dropCounter = 0; 
+                this.lockCounter = 0;
+                this.lockResetCount = 0;
+                this.draw();
+            },
+
+            resetGameData() {
+                this.autoSetTimerActive = false; // タイマー非活性化
+                this.isASelectionActive = false;
+                this.currentRows = INITIAL_ROWS;
+                this.isExtended = false;
+                this.canvas.height = INITIAL_ROWS * BLOCK_SIZE;
+                this.board = Array.from({length: INITIAL_ROWS}, () => Array(COLS).fill(0));
+                this.history = [];
+                this.score = 0;
+                
+                if (!this.isSuspendedPlay) {
+                    this.score = 0;
+                }
+
+                this.dropCounter = 0; 
+                this.lockCounter = 0;
+                this.lockResetCount = 0;
+                
+                // ゲームオーバーから最初期のセーブを作るため、最初のプレイ前（history.length === 0）のみにsaveHistoryを限定
+                this.saveHistory();
+                this.nextPiece = generateNewPiece();
+                playerReset(); 
+                this.updateLockState();
+                this.updateScoreUI();
+                this.lastTime = performance.now();
+                this.draw();
+            },
+
+            // 居酒屋テトリスモード中断 息抜き用通常テトリス開始 (開始前に3秒のカウントダウンを挟む)
+            async suspendAndStartNormalGame() {
+                if (this.gameOver || this.isLotteryRunning) return;
+                this.autoSetTimerActive = false; // 中断時はタイマーリセット
+                this.isASelectionActive = false;
+
+                // 現在の状態を退避
+                this.suspendedState = {
+                    board: JSON.parse(JSON.stringify(this.board)),
+                    piece: this.piece ? { shape: JSON.parse(JSON.stringify(this.piece.shape)), colorIndex: this.piece.colorIndex, pos: { ...this.piece.pos } } : null,
+                    nextPiece: this.nextPiece ? { shape: JSON.parse(JSON.stringify(this.nextPiece.shape)), colorIndex: this.nextPiece.colorIndex } : null,
+                    gameOver: this.gameOver,
+                    counterValue: this.counterValue,
+                    currentRows: this.currentRows,
+                    isExtended: this.isExtended,
+                    isFreePlacement: this.isFreePlacement,
+                    isFreeFall: this.isFreeFall,
+                    isAutoNext: this.isAutoNext,
+                    baseSpeed: this.baseSpeed,
+                    history: JSON.parse(JSON.stringify(this.history))
+                };
+
+                // 息抜きフラグON
+                this.isSuspendedPlay = true;
+
+                // 新しく通常テトリスを遊ぶ (最初の通常プレイと同じ条件)
+                this.currentRows = INITIAL_ROWS;
+                this.isExtended = false;
+                this.isFreePlacement = false;
+                this.isFreeFall = true;
+                this.isAutoNext = true;
+                this.canvas.height = INITIAL_ROWS * BLOCK_SIZE;
+                this.board = Array.from({length: INITIAL_ROWS}, () => Array(COLS).fill(0));
+                this.history = [];
+                this.score = 0;
+                this.dropCounter = 0; 
+                this.lockCounter = 0;
+                this.lockResetCount = 0;
+
+                // 3秒のカウントダウンをスタート
+                this.isLotteryRunning = true;
+                this.showUI('lotteryOverlay');
+                const statusText = document.getElementById('lotteryStatus');
+                statusText.innerText = "通常テトリスを開始します！";
+                
+                const text = document.getElementById('lotteryText');
+                for (let i = 3; i > 0; i--) {
+                    text.innerText = i;
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                this.isLotteryRunning = false;
+                statusText.innerText = "";
+                this.showUI(null);
+
+                this.isPaused = false;
+                this.saveHistory();
+                this.nextPiece = generateNewPiece();
+                playerReset(); 
+
+                this.updateLockState();
+                this.updateScoreUI();
+                this.draw();
+            },
+
+            // 息抜きプレイ終了後に居酒屋テトリスモードに戻る
+            returnToIzakayaGame() {
+                if (!this.suspendedState) return;
+
+                const state = this.suspendedState;
+                this.board = state.board;
+                this.currentRows = state.currentRows;
+                this.isExtended = state.isExtended;
+                this.isFreePlacement = state.isFreePlacement;
+                this.isFreeFall = state.isFreeFall;
+                this.isAutoNext = state.isAutoNext;
+                this.counterValue = state.counterValue;
+                this.baseSpeed = state.baseSpeed;
+                this.history = state.history;
+
+                this.canvas.height = this.currentRows * BLOCK_SIZE;
+
+                this.piece = state.piece ? new Piece(state.piece.shape, state.piece.colorIndex, state.piece.pos) : null;
+                this.nextPiece = state.nextPiece ? new Piece(state.nextPiece.shape, state.nextPiece.colorIndex) : null;
+
+                this.gameOver = state.gameOver;
+                this.isSuspendedPlay = false;
+                this.suspendedState = null;
+
+                this.updateBaseSpeed();
+                this.updateLockState();
+                this.updateCounterUI();
+                this.restoreOverlayState();
+                this.updateScoreUI(); // 息抜きプレイのスコアは破棄され、firstGameScoreに戻る
+                this.draw();
+            },
+
+            gameLoop(time) {
+                const deltaTime = time - this.lastTime;
+                this.lastTime = time;
+                if (!this.isPaused && !this.gameOver && !this.isLotteryRunning && !this.isConfirming) {
+                    // 5秒自動確定タイマー処理 (5秒に書き換え)
+                    if (this.autoSetTimerActive) {
+                        this.autoSetTimer -= deltaTime;
+                        if (this.autoSetTimer <= 0) {
+                            this.autoSetTimer = 0;
+                            this.autoSetTimerActive = false;
+                            document.getElementById('setTimerDisplay').classList.add('hidden');
+                            
+                            // FREE CHOICE選択中に5秒タイムアウトが発生した場合は、
+                            // 通常ブロックからランダムに1つ選んで空中に出現させてゲームを続行する
+                            if (this.isASelectionActive) {
+                                this.isASelectionActive = false;
+                                this.showUI(null);
+                                
+                                const randIdx = Math.floor(Math.random() * 7) + 1;
+                                this.saveHistory();
+                                this.piece = new Piece(SHAPES[randIdx], randIdx);
+                                if (collide(this.board, this.piece, this.isFreePlacement)) {
+                                    this.piece.pos.y = 0;
+                                }
+                                this.draw();
+                                
+                                // ブロックが出現したため、さらに5秒の確定カウントを作動させて自動落下を可能に
+                                this.autoSetTimer = 5000;
+                                this.autoSetTimerActive = true;
+                                const timerLabel = document.getElementById('setTimerLabel');
+                                if (timerLabel) timerLabel.innerText = "AUTO SET";
+                                
+                                const t = document.getElementById('saveToast');
+                                t.innerText = "時間切れ！ランダムに選択されました"; t.style.opacity = '1';
+                                setTimeout(() => t.style.opacity = '0', 2000);
+                            } else {
+                                this.lockPiece(true); // 自動確定を通知 (真下へ限界スライド)
+                            }
+                        } else {
+                            const timerDisplay = document.getElementById('setTimerDisplay');
+                            timerDisplay.classList.remove('hidden');
+                            document.getElementById('setTimerSec').innerText = (this.autoSetTimer / 1000).toFixed(1);
+                        }
+                    } else {
+                        document.getElementById('setTimerDisplay').classList.add('hidden');
+                    }
+
+                    if (this.isFreeFall && this.piece) {
+                        this.dropCounter += deltaTime;
+                        if (this.dropCounter > this.dropInterval) playerDrop();
+                    }
+                    if (this.piece && !this.isFreePlacement) {
+                        const isAtBottom = collide(this.board, { ...this.piece, pos: { ...this.piece.pos, y: this.piece.pos.y + 1 } });
+                        if (isAtBottom) {
+                            this.lockCounter += deltaTime;
+                            if (this.lockCounter >= this.lockDelay) this.lockPiece();
+                        } else {
+                            this.lockCounter = 0;
+                        }
+                    }
+                }
+                this.draw();
+                requestAnimationFrame((t) => this.gameLoop(t));
+            },
+
+            // 落下予想位置（Y軸）の取得関数を追加
+            getGhostY() {
+                if (!this.piece) return 0;
+                let ghostY = this.piece.pos.y;
+                // 通常のテトリス衝突ルールに従い、真下の衝突限界地点を計算
+                while (!collide(this.board, { ...this.piece, pos: { ...this.piece.pos, y: ghostY + 1 } }, false)) {
+                    ghostY++;
+                }
+                return ghostY;
+            },
+
+            lockPiece(isAutoSet = false) {
+                if (!this.piece) return;
+                this.autoSetTimerActive = false; // ロックされたら自動確定タイマーを停止
+                this.isASelectionActive = false;
+                
+                // 5秒タイマー切れが発生した場合は、
+                // 現在の位置から「HARDDROPした場所（真下へ限界まで落とした場所）」にブロック座標をスライド移動させてからマージする
+                if (isAutoSet) {
+                    while (!collide(this.board, this.piece, false)) {
+                        this.piece.pos.y++;
+                    }
+                    this.piece.pos.y--;
+                    if (this.piece.pos.y < 0) {
+                        this.piece.pos.y = 0;
+                    }
+                }
+
+                // ブロックがマージされる「直前」に、一手前の状態履歴を保存することでUndoの正確な1手戻りを保証する
+                this.saveHistory();
+
+                let jokers = [];
+                this.piece.shape.forEach((row, y) => row.forEach((val, x) => {
+                    if (val === 9) {
+                        jokers.push({
+                            x: this.piece.pos.x + x,
+                            y: this.piece.pos.y + y
+                        });
+                    }
+                }));
+
+                merge(this.board, this.piece);
+
+                // JOKER爆破処理 (3x3)
+                if (jokers.length > 0) {
+                    jokers.forEach(j => {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const ty = j.y + dy;
+                                const tx = j.x + dx;
+                                if (ty >= 0 && ty < this.currentRows && tx >= 0 && tx < COLS) {
+                                    this.board[ty][tx] = 0;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const isOver = !this.isExtended && checkGameOver(this.board);
+                this.piece = null;
+                arenaSweep(this.board);
+                this.lockCounter = 0;
+                this.lockResetCount = 0;
+                if (isOver) {
+                    this.piece = this.nextPiece || generateNewPiece();
+                    this.nextPiece = generateNewPiece();
+                    this.gameOver = true;
+
+                    if (this.isSuspendedPlay) {
+                        // 息抜き完了時のリザルト画面表示
+                        document.getElementById('compCurrentScore').innerText = this.score.toLocaleString();
+                        document.getElementById('compFirstScore').innerText = this.firstGameScore.toLocaleString();
+                        
+                        const msgBox = document.getElementById('compResultMessage');
+                        if (this.firstGameScore === 0) {
+                            msgBox.innerHTML = "<p class='text-amber-400 font-black text-sm'>最初のスコア記録がありません。<br>今回が最初のレコードになります！</p>";
+                        } else if (this.score > this.firstGameScore) {
+                            const ratio = this.firstGameScore === 0 ? 100 : Math.round((this.score / this.firstGameScore) * 100);
+                            msgBox.innerHTML = `<p class='text-emerald-400 font-black text-sm'>★ ハイスコア更新！ ★<br>最初のスコアの <span class='text-base font-mono font-black'>${ratio}%</span> に達しました！</p>`;
+                        } else {
+                            const ratio = this.firstGameScore === 0 ? 0 : Math.round((this.score / this.firstGameScore) * 100);
+                            msgBox.innerHTML = `<p class='text-slate-300 font-bold text-xs'>最初のスコアの <span class='font-mono font-bold'>${ratio}%</span> でした。<br>ハイスコア更新ならず！</p>`;
+                        }
+                        app.showUI('scoreComparisonOverlay');
+                    } else {
+                        // 初回プレイ終了時、現在のスコアを「最初のゲームスコア」として保存・確定 (0点でも保存)
+                        this.firstGameScore = this.score;
+                        localStorage.setItem('tetris_first_score', this.firstGameScore);
+
+                        if (this.score > this.firstHighScore) {
+                            this.firstHighScore = this.score;
+                            localStorage.setItem('tetris_first_highscore', this.firstHighScore);
+                        }
+                        this.updateScoreUI();
+                        this.showUI('gameOverScreen');
+                    }
+                } else {
+                    // 自動投入
+                    if (isAutoSet) {
+                        this.updateManualNextBtnVisibility();
+                        this.draw();
+                    } else {
+                        // 通常、自動落下ロックや手動HARDDROP時は次のブロックを自動投入
+                        playerReset();
+                    }
+                }
+            },
+
+            updateManualNextBtnVisibility() {
+                // 自動投入をコントロールする補助メソッド
+            },
+
+            updateBaseSpeed() {
+                this.baseSpeed = parseInt(document.getElementById('speedRange').value);
+                document.getElementById('speedValueDisplay').innerText = this.baseSpeed;
+                // 最大10段階に合わせた、普通のテトリスゲームに近い感覚のスピードカーブ (レベル10で50ms、初期値8で約160ms)
+                const speedIntervals = [
+                    1000, // 1
+                    850,  // 2
+                    700,  // 3
+                    550,  // 4
+                    400,  // 5
+                    300,  // 6
+                    220,  // 7
+                    160,  // 8 (初期値)
+                    100,  // 9
+                    50    // 10
+                ];
+                this.dropInterval = speedIntervals[this.baseSpeed - 1] || 160;
+            },
+
+            // 抽選機内の結果ブロック形状描画
+            drawLotteryResultBlock(colorIndex) {
+                const canvas = document.getElementById('lotteryResultCanvas');
+                canvas.classList.remove('hidden');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const shape = SHAPES[colorIndex];
+                const blockS = 22; 
+                
+                const h = shape.length;
+                const w = shape[0].length;
+                const offsetX = (canvas.width - w * blockS) / 2;
+                const offsetY = (canvas.height - h * blockS) / 2;
+
+                ctx.fillStyle = COLORS[colorIndex];
+                shape.forEach((row, y) => row.forEach((val, x) => {
+                    if (val > 0) {
+                        const px = offsetX + x * blockS;
+                        const py = offsetY + y * blockS;
+                        ctx.fillRect(px, py, blockS, blockS);
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(px, py, blockS, blockS);
+
+                        if (colorIndex === 8) {
+                            ctx.fillStyle = '#0f172a';
+                            ctx.font = 'bold 13px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('F', px + blockS/2, py + blockS/2); 
+                        } else if (colorIndex === 9) {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = '13px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('🃏', px + blockS/2, py + blockS/2);
+                        }
+                    }
+                }));
+            },
+
+            // FREE CHOICE選択パネル (横一列 7列にボタンをスリムに生成)
+            showASelectionGrid() {
+                const grid = document.getElementById('aSelectionGrid');
+                grid.innerHTML = '';
+                
+                grid.className = "grid grid-cols-7 gap-1 w-full max-w-full justify-center";
+                
+                for (let i = 1; i <= 7; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'select-btn hover:border-amber-400 focus:outline-none p-1 bg-slate-950/80 rounded-md flex items-center justify-center border border-slate-700/60 transition-colors';
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 38; // 横並びに余裕を持たせるための縮小サイズ (38x34)
+                    canvas.height = 34; 
+                    const ctx = canvas.getContext('2d');
+                    
+                    const shape = SHAPES[i];
+                    const bs = 7; // ミニマムなブロック単位
+                    const ox = (canvas.width - shape[0].length * bs) / 2;
+                    const oy = (canvas.height - shape.length * bs) / 2;
+                    ctx.fillStyle = COLORS[i];
+                    shape.forEach((row, y) => row.forEach((val, x) => {
+                        if (val > 0) {
+                            ctx.fillRect(ox + x*bs, oy + y*bs, bs - 0.5, bs - 0.5);
+                            ctx.strokeStyle = '#fff';
+                            ctx.lineWidth = 0.5;
+                            ctx.strokeRect(ox + x*bs, oy + y*bs, bs - 0.5, bs - 0.5);
+                        }
+                    }));
+
+                    btn.appendChild(canvas);
+                    btn.onclick = () => {
+                        this.assignSelectedPieceFromA(i);
+                    };
+                    grid.appendChild(btn);
+                }
+
+                // FREE CHOICE選択の5秒タイマーカウントダウンを作動
+                this.isASelectionActive = true;
+                this.autoSetTimer = 5000; // 5秒
+                this.autoSetTimerActive = true;
+                const timerLabel = document.getElementById('setTimerLabel');
+                if (timerLabel) timerLabel.innerText = "SELECT BLOCK";
+
+                this.showUI('aSelectionOverlay');
+            },
+
+            assignSelectedPieceFromA(chosenIndex) {
+                this.isASelectionActive = false;
+                this.autoSetTimerActive = false; // 一旦タイマーをリセット
+                document.getElementById('setTimerDisplay').classList.add('hidden');
+
+                this.showUI(null);
+                
+                // エースでブロックを選択する「直前」の履歴をセーブして、Undoで確実に戻れるように変更
+                this.saveHistory();
+                
+                this.piece = new Piece(SHAPES[chosenIndex], chosenIndex);
+                if (collide(this.board, this.piece, this.isFreePlacement)) {
+                    this.piece.pos.y = 0;
+                }
+                this.draw();
+
+                // 抽選後のブロックが表示されたため、自動確定タイマー5秒を始動 (5秒)
+                this.autoSetTimer = 5000;
+                this.autoSetTimerActive = true;
+                const timerLabel = document.getElementById('setTimerLabel');
+                if (timerLabel) timerLabel.innerText = "AUTO SET";
+                
+                const t = document.getElementById('saveToast');
+                t.innerText = "選択完了！5秒後に確定します"; t.style.opacity = '1';
+                setTimeout(() => t.style.opacity = '0', 2000);
+            },
+
+            // ストック消費型カード抽選
+            async drawLottery() {
+                if (this.isLotteryRunning || this.isConfirming) return;
+
+                const requiredStockCost = 1 + this.excludedSlots.length;
+                if (this.counterValue < requiredStockCost) {
+                    const toast = document.getElementById('saveToast');
+                    toast.innerText = `ストック不足！ (必要: ${requiredStockCost})`; 
+                    toast.style.opacity = '1';
+                    setTimeout(() => toast.style.opacity = '0', 2000);
+                    return;
+                }
+
+                const slots = this.getSlots();
+                const activePool = [];
+                slots.forEach((slot, idx) => {
+                    if (!this.excludedSlots.includes(idx)) {
+                        activePool.push(slot.type);
+                    }
+                });
+
+                if (activePool.length === 0) {
+                    const toast = document.getElementById('saveToast');
+                    toast.innerText = `すべてのスロットが除外されています！`; 
+                    toast.style.opacity = '1';
+                    setTimeout(() => toast.style.opacity = '0', 2000);
+                    return;
+                }
+
+                this.counterValue -= requiredStockCost;
+                this.updateCounterUI();
+
+                this.isLotteryRunning = true;
+                const statusText = document.getElementById('lotteryStatus');
+                statusText.innerText = "カードシャッフル中..."; 
+                
+                document.getElementById('lotteryResultCanvas').classList.add('hidden');
+                this.showUI('lotteryOverlay'); 
+                const text = document.getElementById('lotteryText');
+                
+                for (let i = 3; i > 0; i--) { 
+                    text.innerText = i; 
+                    await new Promise(r => setTimeout(r, 800)); 
+                }
+
+                const chosenIndex = activePool[Math.floor(Math.random() * activePool.length)];
+
+                let resultText = "";
+                let resultColorClass = "";
+                
+                if (chosenIndex >= 1 && chosenIndex <= 7) {
+                    resultText = "テトリスブロック 当選！";
+                    resultColorClass = "text-sky-400";
+                    this.drawLotteryResultBlock(chosenIndex);
+                } else if (chosenIndex === 8) {
+                    resultText = "FREE CHOICE 当選！🎰<br><span class='text-xs font-normal text-slate-300'>自由選択チャンス発動！</span>";
+                    resultColorClass = "text-amber-400 font-extrabold animate-bounce";
+                    this.drawLotteryResultBlock(8);
+                } else if (chosenIndex === 9) {
+                    resultText = "JOKER 当選！💀ハズレ<br><span class='text-xs font-normal text-red-400'>ブロック出現なし ＆ ストック-1</span>";
+                    resultColorClass = "text-pink-500 font-extrabold";
+                    this.drawLotteryResultBlock(9);
+                }
+
+                text.innerHTML = resultText;
+                text.className = "text-xl sm:text-2xl font-black leading-snug " + resultColorClass;
+                
+                await new Promise(r => setTimeout(r, 2200));
+
+                this.isLotteryRunning = false;
+                text.className = "text-4xl sm:text-6xl font-black text-white";
+                this.restoreOverlayState();
+
+                if (!this.gameOver) {
+                    if (chosenIndex === 8) {
+                        this.showASelectionGrid(); // モーダル側で選択
+                    } else if (chosenIndex === 9) {
+                        // ジョーカー当選時は履歴をセーブして、ストックのマイナス状態をUndo可能にする
+                        this.saveHistory();
+                        if (this.counterValue > 0) {
+                            this.counterValue--;
+                            this.updateCounterUI();
+                        }
+                        this.piece = null; 
+                        this.draw();
+                    } else {
+                        // ブロックをカードからドロー（設置）する直前に履歴を保存
+                        this.saveHistory();
+                        this.piece = new Piece(SHAPES[chosenIndex], chosenIndex);
+                        if (collide(this.board, this.piece, this.isFreePlacement)) {
+                            this.piece.pos.y = 0;
+                        }
+                        this.draw();
+
+                        // ブロックが表示されたため、自動確定タイマー5秒をスタート
+                        this.autoSetTimer = 5000;
+                        this.autoSetTimerActive = true;
+                        const timerLabel = document.getElementById('setTimerLabel');
+                        if (timerLabel) timerLabel.innerText = "AUTO SET";
+                    }
+                }
+            },
+
+            drawBlock(x, y, colorIndex, isMoving = false) {
+                const px = x * BLOCK_SIZE, py = y * BLOCK_SIZE, s = BLOCK_SIZE;
+                this.ctx.fillStyle = COLORS[colorIndex];
+                this.ctx.fillRect(px, py, s, s);
+                this.ctx.strokeStyle = isMoving ? 'rgba(255, 255, 255, 1.0)' : 'rgba(255, 255, 255, 0.4)';
+                this.ctx.lineWidth = isMoving ? 3 : 1.5;
+                this.ctx.strokeRect(px, py, s, s);
+                
+                this.ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                this.ctx.fillRect(px, py, s, 2);
+                this.ctx.fillRect(px, py, 2, s);
+
+                if (colorIndex === 8) {
+                    this.ctx.fillStyle = '#0f172a';
+                    this.ctx.font = 'bold 22px "Arial Black", sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText('F', px + s/2, py + s/2); 
+                } else if (colorIndex === 9) {
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.font = '22px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText('🃏', px + s/2, py + s/2);
+                }
+            },
+
+            draw() {
+                if(!this.ctx) return;
+                this.ctx.fillStyle = '#020617'; 
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; 
+                this.ctx.lineWidth = 1;
+                for (let x = 0; x <= COLS; x++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x * BLOCK_SIZE, 0);
+                    this.ctx.lineTo(x * BLOCK_SIZE, this.currentRows * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                for (let y = 0; y <= this.currentRows; y++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y * BLOCK_SIZE);
+                    this.ctx.lineTo(COLS * BLOCK_SIZE, y * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                this.board.forEach((row, y) => row.forEach((val, x) => { if (val > 0) this.drawBlock(x, y, val); }));
+
+                // 落下予測位置（ゴーストブロック）の描画（居酒屋テトリスモードでカードドロー後、タイマー動作中のみ表示）
+                if (this.piece && this.isExtended && this.autoSetTimerActive) {
+                    const ghostY = this.getGhostY();
+                    // 現在のブロックより下の位置にある場合のみ、半透明でガイドを描写
+                    if (ghostY > this.piece.pos.y) {
+                        this.ctx.globalAlpha = 0.3; // 半透明
+                        this.piece.shape.forEach((row, y) => row.forEach((val, x) => { 
+                            if (val > 0) {
+                                this.drawBlock(this.piece.pos.x + x, ghostY + y, val, false); 
+                            }
+                        }));
+                        this.ctx.globalAlpha = 1.0; // リセット
+                    }
+                }
+
+                if (this.piece) {
+                    const isIzakaya = this.isExtended && this.isFreePlacement;
+                    if (isIzakaya) this.ctx.globalAlpha = 0.5;
+                    this.piece.shape.forEach((row, y) => row.forEach((val, x) => { 
+                        if (val > 0) this.drawBlock(this.piece.pos.x + x, this.piece.pos.y + y, val, true); 
+                    }));
+                    this.ctx.globalAlpha = 1.0;
+                }
+            },
+
+            saveLocal() {
+                const state = { 
+                    board: this.board, gameOver: this.gameOver, isPaused: this.isPaused, counterValue: this.counterValue,
+                    currentRows: this.currentRows, isExtended: this.isExtended,
+                    numA: this.numA, numJoker: this.numJoker,
+                    excludedSlots: this.excludedSlots,
+                    score: this.score, firstGameScore: this.firstGameScore, firstHighScore: this.firstHighScore,
+                    settings: { isFreeFall: this.isFreeFall, isFreePlacement: this.isFreePlacement, baseSpeed: this.baseSpeed, isAutoNext: this.isAutoNext } 
+                };
+                localStorage.setItem('tetris_save', JSON.stringify(state));
+                const t = document.getElementById('saveToast');
+                t.innerText = "保存しました"; t.style.opacity = '1';
+                setTimeout(() => t.style.opacity = '0', 2000);
+            },
+
+            loadLocal() {
+                const dataStr = localStorage.getItem('tetris_save');
+                if (!dataStr) return;
+                this.autoSetTimerActive = false; // ロード時は一度タイマーリセット
+                this.isASelectionActive = false;
+                
+                const data = JSON.parse(dataStr);
+                this.board = data.board; 
+                this.currentRows = data.currentRows || INITIAL_ROWS;
+                this.isExtended = data.isExtended || false;
+                this.canvas.height = this.currentRows * BLOCK_SIZE;
+                this.gameOver = data.gameOver || false;
+                this.isPaused = (data.isPaused !== undefined) ? data.isPaused : true;
+                
+                const settings = data.settings || {};
+                this.isFreeFall = settings.isFreeFall !== undefined ? settings.isFreeFall : true; 
+                this.isFreePlacement = settings.isFreePlacement || false;
+                this.baseSpeed = settings.baseSpeed || 8;
+                this.isAutoNext = settings.isAutoNext !== undefined ? settings.isAutoNext : true;
+                
+                this.numA = data.numA !== undefined ? data.numA : 1;
+                this.numJoker = data.numJoker !== undefined ? data.numJoker : 1;
+                this.excludedSlots = data.excludedSlots || [];
+                this.score = data.score || 0;
+                this.firstGameScore = data.firstGameScore !== undefined ? data.firstGameScore : (data.score || 0);
+                this.firstHighScore = data.firstHighScore !== undefined ? data.firstHighScore : this.firstHighScore;
+
+                this.counterValue = data.counterValue || 0;
+                document.getElementById('speedRange').value = this.baseSpeed;
+                
+                this.updateBaseSpeed(); 
+                this.createExcludeBlockUI();
+                this.updateDeckUI();
+                this.updateCounterUI(); 
+                this.updateScoreUI();
+                this.updateLockState();
+                this.restoreOverlayState(); 
+                this.draw();
+                
+                const t = document.getElementById('saveToast');
+                t.innerText = "ロード完了"; t.style.opacity = '1';
+                setTimeout(() => t.style.opacity = '0', 2000);
+            }
+        };
+
+        class Piece { constructor(shape, colorIndex, pos = null) { 
+            this.shape = shape; 
+            this.colorIndex = colorIndex; 
+            this.pos = pos || {x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0}; 
+        } }
+        
+        function generateNewPiece() { 
+            const index = Math.floor(Math.random() * 7) + 1; 
+            return new Piece(SHAPES[index], index); 
+        }
+        
+        function collide(board, piece, ignoreBlocks = false) {
+            if (!piece) return false;
+            const [m, o] = [piece.shape, piece.pos];
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0) {
+                        const py = y + o.y;
+                        const px = x + o.x;
+                        if (px < 0 || px >= COLS || py >= board.length) return true;
+                        if (!ignoreBlocks && py >= 0 && board[py] && board[py][px] !== 0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        function merge(board, piece) {
+            piece.shape.forEach((row, y) => row.forEach((val, x) => {
+                if (val !== 0) {
+                    const boardRow = board[y + piece.pos.y];
+                    if (boardRow) boardRow[x + piece.pos.x] = val;
+                }
+            }));
+        }
+        
+        function checkGameOver(board) {
+            for (let x = 0; x < COLS; x++) { if (board[0][x] !== 0) return true; }
+            return false;
+        }
+
+        function rotate(matrix, dir) { return dir === 1 ? matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()) : matrix[0].map((_, i) => matrix.map(row => row[row.length - 1 - i])); }
+        
+        function arenaSweep(board) {
+            let linesCleared = 0;
+            outer: for (let y = board.length - 1; y >= 0; --y) {
+                for (let x = 0; x < board[y].length; ++x) if (board[y][x] === 0) continue outer;
+                board.unshift(board.splice(y, 1)[0].fill(0)); ++y;
+                linesCleared++;
+            }
+
+            if (linesCleared > 0 && !app.isExtended) {
+                const scoreTable = [0, 100, 300, 600, 1200];
+                const pts = (scoreTable[linesCleared] || 1200) * (app.baseSpeed || 1);
+                app.score += pts;
+                
+                if (!app.isSuspendedPlay) {
+                    // 通常の初回プレイ時は、スコアを「最初のゲームスコア」としてリアルタイム記録
+                    app.firstGameScore = app.score;
+                    localStorage.setItem('tetris_first_score', app.firstGameScore);
+
+                    if (app.score > app.firstHighScore) {
+                        app.firstHighScore = app.score;
+                        localStorage.setItem('tetris_first_highscore', app.firstHighScore);
+                    }
+                }
+                app.updateScoreUI();
+            }
+        }
+
+        function playerReset() { 
+            app.piece = app.nextPiece || generateNewPiece(); 
+            app.nextPiece = generateNewPiece(); 
+            app.lockResetCount = 0;
+            if (collide(app.board, app.piece, false)) { 
+                if (!app.isExtended) {
+                    app.gameOver = true; 
+                    
+                    if (app.isSuspendedPlay) {
+                        document.getElementById('compCurrentScore').innerText = app.score.toLocaleString();
+                        document.getElementById('compFirstScore').innerText = app.firstGameScore.toLocaleString();
+                        
+                        const msgBox = document.getElementById('compResultMessage');
+                        if (app.firstGameScore === 0) {
+                            msgBox.innerHTML = "<p class='text-amber-400 font-black text-sm'>最初のスコア記録がありません。<br>今回が最初のレコードになります！</p>";
+                        } else if (app.score > app.firstGameScore) {
+                            const ratio = app.firstGameScore === 0 ? 100 : Math.round((app.score / app.firstGameScore) * 100);
+                            msgBox.innerHTML = `<p class='text-emerald-400 font-black text-sm'>★ ハイスコア更新！ ★<br>最初のスコアの <span class='text-base font-mono font-black'>${ratio}%</span> に達しました！</p>`;
+                        } else {
+                            const ratio = app.firstGameScore === 0 ? 0 : Math.round((app.score / app.firstGameScore) * 100);
+                            msgBox.innerHTML = `<p class='text-slate-300 font-bold text-xs'>最初のスコアの <span class='font-mono font-bold'>${ratio}%</span> でした。<br>ハイスコア更新ならず！</p>`;
+                        }
+                        app.showUI('scoreComparisonOverlay');
+                    } else {
+                        // 初回プレイ終了時、現在のスコアを「最初のゲームスコア」として保存・確定 (0点でも保存)
+                        app.firstGameScore = app.score;
+                        localStorage.setItem('tetris_first_score', app.firstGameScore);
+
+                        if (app.score > app.firstHighScore) {
+                            app.firstHighScore = app.score;
+                            localStorage.setItem('tetris_first_highscore', app.firstHighScore);
+                        }
+                        app.updateScoreUI();
+                        app.showUI('gameOverScreen'); 
+                    }
+                }
+            } 
+        }
+
+        function playerMove(dir) { 
+            if (app.gameOver || !app.piece) return; 
+            app.piece.pos.x += dir; 
+            if (collide(app.board, app.piece, app.isFreePlacement)) app.piece.pos.x -= dir; 
+            else app.handleLockReset();
+        }
+
+        function playerMoveUp() { 
+            if (app.gameOver || !app.piece || !app.isFreePlacement) return; 
+            app.piece.pos.y--; 
+            if (collide(app.board, app.piece, app.isFreePlacement)) app.piece.pos.y++; 
+            else app.handleLockReset();
+        }
+
+        function playerRotate(dir) {
+            if (app.gameOver || !app.piece) return;
+            const pos = app.piece.pos.x; let offset = 1; const oldShape = app.piece.shape;
+            app.piece.shape = rotate(app.piece.shape, dir);
+            while (collide(app.board, app.piece, app.isFreePlacement)) {
+                app.piece.pos.x += offset; offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > app.piece.shape[0].length) { app.piece.shape = oldShape; app.piece.pos.x = pos; return; }
+            }
+            app.handleLockReset();
+        }
+
+        function playerDrop() {
+            if (app.gameOver || !app.piece) return;
+            // 5秒タイマー配置時間中は下スライド操作を無効にする
+            if (app.isFreePlacement && app.autoSetTimerActive) {
+                return;
+            }
+            app.piece.pos.y++;
+            if (collide(app.board, app.piece, app.isFreePlacement)) {
+                app.piece.pos.y--; 
+                if (!app.isFreePlacement && app.lockCounter >= app.lockDelay) app.lockPiece();
+            } else {
+                app.lockCounter = 0;
+                app.lockResetCount = 0;
+            }
+            app.dropCounter = 0;
+        }
+
+        // 5秒配置タイマー中は手動DROPを無効化
+        function playerHardDrop() {
+            if (app.gameOver || !app.piece) return;
+            
+            if (app.isFreePlacement && app.autoSetTimerActive) {
+                return;
+            }
+
+            while (!collide(app.board, app.piece, false)) {
+                app.piece.pos.y++;
+            }
+            app.piece.pos.y--; 
+            if (app.piece.pos.y < 0) {
+                app.piece.pos.y = 0;
+            }
+            app.lockPiece();
+            app.dropCounter = 0;
+        }
+
+        window.onload = () => { window.app = app; app.init(); };
+
+        document.addEventListener('keydown', e => {
+            if (app.isLotteryRunning || app.isConfirming) return;
+            
+            if (e.key.toLowerCase() === 'u') { app.undo(); return; } 
+            
+            if (e.key.toLowerCase() === 'p') { e.preventDefault(); app.togglePause(); return; }
+
+            if (app.gameOver || app.isPaused) return;
+            const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "z", "x", "Z", "X"];
+            if (keys.includes(e.key)) e.preventDefault();
+            switch(e.key) {
+                case 'ArrowLeft': playerMove(-1); break;
+                case 'ArrowRight': playerMove(1); break;
+                case 'ArrowDown': {
+                    if (!(app.isFreePlacement && app.autoSetTimerActive)) {
+                        playerDrop();
+                    }
+                    break;
+                }
+                case 'ArrowUp': playerRotate(1); break; 
+                case 'x': case 'X': playerRotate(1); break;
+                case 'z': case 'Z': playerRotate(-1); break;
+                case ' ': playerHardDrop(); break;
+            }
+        });
+    </script>
+</body>
+</html>
